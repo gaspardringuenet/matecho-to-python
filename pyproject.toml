@@ -1,0 +1,26 @@
+[tool.uv]
+package = true
+
+[project]
+name = "matecho-to-python"
+version = "0.1.0"
+description = "Small CLI tool to convert Matecho (https://pages.iuem.eu/ird/matecho/) Echointegration.mat files into an xarray/Zarr store compatible with the Echostack."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dask>=2026.7.1",
+    "h5py>=3.16.0",
+    "matplotlib>=3.11.1",
+    "xarray>=2026.7.0",
+    "zarr>=3.3.0",
+]
+
+[project.scripts]
+matecho-convert = "matecho_to_python.main:main"
+
+[project.optional-dependencies]
+viz = [
+    "datashader>=0.19.1",
+    "hvplot>=0.12.2",
+    "panel>=1.9.3",
+]
