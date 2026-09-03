@@ -42,7 +42,7 @@ def main(
         fdtype = float_dtype
 
     # Create output_path
-    input_paths: list[Path] = [Path(e) for e in input]
+    input_paths: list[Path] = [Path(e).expanduser().resolve() for e in input]
     output_path: Path = input_paths[0].parent / (input_paths[0].stem + ".zarr")
 
     # Process files iteratively
@@ -55,7 +55,7 @@ def main(
 
         if i == 0:
             logger.info("Saving as Zarr store")
-            ds.to_zarr(output_path, mode="w")  # First file: create
+            ds.to_zarr(output_path, mode="w", zarr_format=2)  # First file: create
         else:
             logger.info("Appending Zarr store on ping_time dim (aligning chunks)")
             ds.to_zarr(
@@ -63,6 +63,7 @@ def main(
                 mode="a",
                 append_dim="ping_time",
                 align_chunks=True,
+                zarr_format=2,
             )
 
     # Open complete Dataset
@@ -169,6 +170,10 @@ def convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     vals_sA: np.ndarray = np.asarray(f["Sa_surface"]).astype(float_dtype)
     ds["sA"] = (["channel", "ping_time", "depth"], vals_sA)
 
+    # sA_sum (NASC vertical sum)
+    vals_sA_sum: np.ndarray = np.asarray(f["SaSum"]).astype(float_dtype)
+    ds["sA_sum"] = (["ping_time", "channel"], vals_sA_sum)
+
     # Manual cleaning mask variable
     vals_mask: np.ndarray = np.asarray(f["Mask_clean"]).astype("?")  # boolean
     ds["mask_clean"] = (["channel", "ping_time", "depth"], vals_mask)
@@ -180,6 +185,10 @@ def convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     vals_bottom: np.ndarray = np.asarray(f["Bottom"]).astype(float_dtype)
     ds["bottom"] = (["ping_time", "channel"], vals_bottom)
     ds["bottom"] = ds["bottom"].transpose("channel", "ping_time")
+
+    # Sun position
+    vals_sun: np.ndarray = np.asarray(f["SolarAltitude"]).squeeze().astype(float_dtype)
+    ds["sun_alt"] = (["ping_time"], vals_sun)
 
     # Transpose
     ds = ds.transpose("channel", "depth", "ping_time")
@@ -234,6 +243,12 @@ def make_attrs_dict(f: h5py.File) -> dict:
         "sA": {
             "long_name": "Nautical area scattering coefficient (NASC)",
             "units": "m2 nmi-2",
+            "description": "NASC at the EI cell level",
+        },
+        "sA_sum": {
+            "long_name": "Nautical area scattering coefficient (NASC)",
+            "units": "m2 nmi-2",
+            "description": "NASC at the ESDU level",
         },
         "frequency_nominal": {
             "long_name": "Transducer frequency",
