@@ -22,36 +22,42 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def main(
-    input_file: str | list[str] | None = None,
+    input: str | list[str] | None = None,
     plot_echogram: bool = False,
     float_dtype: npt.DTypeLike = np.float64,
+    to_nan_Sv: float | None = None,
 ):
 
     # CLI
-    if input_file is None:  # if no input_file, use CLI
+    if input is None:  # if no input_file, use CLI
         args = parse_cli()
-        input: list[str] = args.input_file
+        input_lst: list[str] = args.input
         plot: bool = args.plot
         fdtype = np.float32 if args.light else np.float64
+        nan_val: float | None = args.to_nan_Sv
     else:  # else, use only passed arguments
-        if isinstance(input_file, str):  # Normalize to list
-            input: list[str] = [input_file]
+        if isinstance(input, str):  # Normalize to list
+            input_lst: list[str] = [input]
         else:
-            input: list[str] = input_file
+            input_lst: list[str] = input
         plot: bool = plot_echogram
         fdtype = float_dtype
+        nan_val: float | None = to_nan_Sv
 
     # Create output_path
-    input_paths: list[Path] = [Path(e).expanduser().resolve() for e in input]
+    input_paths: list[Path] = [Path(e).expanduser().resolve() for e in input_lst]
     output_path: Path = input_paths[0].parent / (input_paths[0].stem + ".zarr")
 
     # Process files iteratively
-    logger.info(f"Processing {len(input)} files → {output_path}")
+    logger.info(f"Processing {len(input_paths)} files → {output_path}")
     for i, filepath in enumerate(input_paths):
         ds = process(filepath, fdtype)
 
         logger.info("Chunking")
         ds = ds.chunk({"channel": 1, "depth": 100, "ping_time": 5000})
+
+        if nan_val is not None:
+            ds["Sv"] = ds["Sv"].where(ds["Sv"] != nan_val)
 
         if i == 0:
             logger.info("Saving as Zarr store")
@@ -89,7 +95,7 @@ def parse_cli() -> argparse.Namespace:
         description="Convert Matecho Echointegration.mat to xarray/Zarr format compatible with Echostack"
     )
     parser.add_argument(
-        "input_file",
+        "input",
         type=str,
         nargs="+",
         help="Path(s) to the Echointegration.mat file(s)",
@@ -103,6 +109,12 @@ def parse_cli() -> argparse.Namespace:
         "--light",
         action=argparse.BooleanOptionalAction,
         help="Whether to make Dataset lighter by using float32 instead of float64 for non-time numerical variables",
+    )
+    parser.add_argument(
+        "--to-nan-Sv",
+        type=float,
+        required=False,
+        help="Sv value to convert to NAN (typically -150 dB for manual data removal in Matecho)",
     )
 
     return parser.parse_args()
