@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import warnings
 from pathlib import Path
 
@@ -21,28 +22,64 @@ logging.basicConfig(
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-def main(
-    input: str | list[str] | None = None,
-    plot_echogram: bool = False,
+def main():
+    """Main function: parse CLI args and run matecho_to_zarr"""
+
+    args = _parse_cli()
+
+    ds_path: Path = mat_to_zarr(
+        input=args.input,
+        float_dtype=np.float32 if args.light else np.float64,
+        to_nan_Sv=args.to_nan_Sv,
+        zarr_format=args.zarr_format,
+    )
+
+    # Open complete Dataset
+    logger.info("Opening concatenated Dataset")
+    ds = xr.open_dataset(ds_path, engine="zarr")
+
+    # Print Dataset
+    logger.info("Printing Dataset")
+    print(ds)
+
+    # Optional, plot random echogram
+    if args.plot:
+        logger.info("Plotting confirmation echogram")
+        plot_small_echogram(ds)
+
+
+def mat_to_zarr(
+    input: os.PathLike | list[os.PathLike],
     float_dtype: npt.DTypeLike = np.float64,
     to_nan_Sv: float | None = None,
-):
+    zarr_format: int = 2,
+) -> Path:
+    """Convert Matecho Echointegration.mat to xarray Zarr format compatible with Echostack
 
-    # CLI
-    if input is None:  # if no input_file, use CLI
-        args = parse_cli()
-        input_lst: list[str] = args.input
-        plot: bool = args.plot
-        fdtype = np.float32 if args.light else np.float64
-        nan_val: float | None = args.to_nan_Sv
-    else:  # else, use only passed arguments
-        if isinstance(input, str):  # Normalize to list
-            input_lst: list[str] = [input]
-        else:
-            input_lst: list[str] = input
-        plot: bool = plot_echogram
-        fdtype = float_dtype
-        nan_val: float | None = to_nan_Sv
+    Parameters
+    ----------
+    input : os.PathLike | list[os.PathLike]
+        One or more Matecho Echointegration files. If several files are passed, they must be compatible (same depth and channel coordinates, compatible time coordinate).
+
+    float_dtype: npt.DTypeLike, default=np.float64
+        Datatype used to store floats in the Dataset.
+
+    to_nan_Sv: float, optional
+        A value of Sv which should be convert to NaN (e.g. -150 dB for manual data removal).
+
+    zarr_format: int, default=2
+        The desired zarr format to target (2 or 3) as of zarr v3.
+
+    Returns
+    -------
+    Path
+        Path to the saved Zarr store. Use xr.open_dataset to inspect.
+    """
+
+    if isinstance(input, list):  # Normalize to list
+        input_lst: list[os.PathLike] = input
+    else:
+        input_lst: list[os.PathLike] = [input]
 
     # Create output_path
     input_paths: list[Path] = [Path(e).expanduser().resolve() for e in input_lst]
@@ -51,13 +88,13 @@ def main(
     # Process files iteratively
     logger.info(f"Processing {len(input_paths)} files → {output_path}")
     for i, filepath in enumerate(input_paths):
-        ds = process(filepath, fdtype)
+        ds = _process_one_file(filepath, float_dtype)
 
         logger.info("Chunking")
         ds = ds.chunk({"channel": 1, "depth": 100, "ping_time": 5000})
 
-        if nan_val is not None:
-            ds["Sv"] = ds["Sv"].where(ds["Sv"] != nan_val)
+        if to_nan_Sv is not None:
+            ds["Sv"] = ds["Sv"].where(ds["Sv"] != to_nan_Sv)
 
         if i == 0:
             logger.info("Saving as Zarr store")
@@ -69,46 +106,30 @@ def main(
                 mode="a",
                 append_dim="ping_time",
                 align_chunks=True,
-                zarr_format=2,
+                zarr_format=zarr_format,
             )
-
-    # Open complete Dataset
-    logger.info("Opening concatenated Dataset")
-    ds = xr.open_dataset(output_path, engine="zarr")
-    ds = ds.load()
-
-    # Print Dataset
-    logger.info("Printing Dataset")
-    print(ds)
-
-    # Show small echogram
-    if plot:
-        plot_small_echogram(ds)
 
     logger.info("Done with processing!")
 
+    return output_path
 
-def parse_cli() -> argparse.Namespace:
+
+def _parse_cli() -> argparse.Namespace:
     """Parse CLI arguments"""
 
     parser = argparse.ArgumentParser(
-        description="Convert Matecho Echointegration.mat to xarray/Zarr format compatible with Echostack"
+        description="Convert Matecho Echointegration.mat to a Zarr store compatible with Echostack"
     )
     parser.add_argument(
         "input",
         type=str,
         nargs="+",
-        help="Path(s) to the Echointegration.mat file(s)",
-    )
-    parser.add_argument(
-        "--plot",
-        action=argparse.BooleanOptionalAction,
-        help="Whether to plot a small confirmation echogram",
+        help="Path(s) to the echointegration .mat file(s)",
     )
     parser.add_argument(
         "--light",
         action=argparse.BooleanOptionalAction,
-        help="Whether to make Dataset lighter by using float32 instead of float64 for non-time numerical variables",
+        help="Make the Dataset lighter by using float32 instead of float64 for non-time numerical variables",
     )
     parser.add_argument(
         "--to-nan-Sv",
@@ -116,19 +137,30 @@ def parse_cli() -> argparse.Namespace:
         required=False,
         help="Sv value to convert to NAN (typically -150 dB for manual data removal in Matecho)",
     )
+    parser.add_argument(
+        "--zarr-format",
+        type=int,
+        default=2,
+        help="The desired zarr format to target (2 or 3) as of zarr v3. By default 2.",
+    )
+    parser.add_argument(
+        "--plot",
+        action=argparse.BooleanOptionalAction,
+        help="Plot a small confirmation echogram after conversion.",
+    )
 
     return parser.parse_args()
 
 
-def process(file_path: Path, float_dtype: npt.DTypeLike) -> xr.Dataset:
+def _process_one_file(file_path: Path, float_dtype: npt.DTypeLike) -> xr.Dataset:
     """Convert a single file"""
 
     with h5py.File(file_path, "r") as f:
         # Build Dataset
-        ds = convert_matecho_EI(f, float_dtype)
+        ds = _convert_matecho_EI(f, float_dtype)
 
         # Fetch attributes
-        attrs_dict = make_attrs_dict(f)
+        attrs_dict = _make_attrs_dict(f)
 
     # Add attributes
     logger.info("Appending attributes to variables")
@@ -139,7 +171,7 @@ def process(file_path: Path, float_dtype: npt.DTypeLike) -> xr.Dataset:
     return ds
 
 
-def convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
+def _convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     """Convert a Matecho echointegration (Echointegration.mat) file into
     an xarray Dataset with Echopype-compatible dimensions."""
 
@@ -210,7 +242,7 @@ def convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     return ds
 
 
-def make_attrs_dict(f: h5py.File) -> dict:
+def _make_attrs_dict(f: h5py.File) -> dict:
     """Build a dictionary containing formatted variables attributes"""
 
     logger.info("Formatting attributes dict using .mat co-variables")
@@ -288,15 +320,20 @@ def make_attrs_dict(f: h5py.File) -> dict:
 
 
 def plot_small_echogram(ds: xr.Dataset) -> None:
-    """Plots a small echogram of transformed Dataset"""
+    """Plots a small (<= 1000 pings) echogram taken randomly in the Dataset"""
 
     logger.info("Starting plot of confirmation echogram")
+
+    npings = len(ds.ping_time.values)
+    size = min(npings, 1000)
+    i = np.random.randint(0, npings - size)
+    window = (i, i + size)
 
     (
         ds.swap_dims({"channel": "frequency_nominal"})
         .drop_vars("channel")
         .Sv.isel(frequency_nominal=0)
-        .isel(ping_time=slice(0, 1000))
+        .isel(ping_time=slice(*window))
         .plot.pcolormesh(
             x="ping_time",
             y="depth",
@@ -304,7 +341,3 @@ def plot_small_echogram(ds: xr.Dataset) -> None:
         )
     )
     plt.show()
-
-
-if __name__ == "__main__":
-    main()
