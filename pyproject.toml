@@ -6,7 +6,7 @@ name = "matecho-to-python"
 version = "0.1.0"
 description = "Small CLI tool to convert Matecho (https://pages.iuem.eu/ird/matecho/) Echointegration.mat files into a Zarr store compatible with the Echostack Python tools (https://uw-echospace.github.io/project/echostack/)."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "dask>=2026.7.1",
     "h5py>=3.16.0",
@@ -17,3 +17,10 @@ dependencies = [
 
 [project.scripts]
 matecho-to-python = "matecho_to_python.main:main"
+
+[dependency-groups]
+dev = [
+    "echoshader>=0.2.3",
+    "holoviews>=1.23.2",
+    "pytest>=9.2.0",
+]
