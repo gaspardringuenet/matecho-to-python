@@ -88,10 +88,11 @@ def mat_to_zarr(
     # Process files iteratively
     logger.info(f"Processing {len(input_paths)} files → {output_path}")
     for i, filepath in enumerate(input_paths):
-        ds = _process_one_file(filepath, float_dtype)
+        with h5py.File(filepath, "r") as f:
+            ds = _process_one_file(f, float_dtype)
 
         logger.info("Chunking")
-        ds = ds.chunk({"channel": 1, "depth": 100, "ping_time": 5000})
+        ds = ds.chunk({"channel": 1, "ping_time": 5000, "depth": 100})
 
         if to_nan_Sv is not None:
             ds["Sv"] = ds["Sv"].where(ds["Sv"] != to_nan_Sv)
@@ -152,15 +153,14 @@ def _parse_cli() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _process_one_file(file_path: Path, float_dtype: npt.DTypeLike) -> xr.Dataset:
+def _process_one_file(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     """Convert a single file"""
 
-    with h5py.File(file_path, "r") as f:
-        # Build Dataset
-        ds = _convert_matecho_EI(f, float_dtype)
+    # Build Dataset
+    ds = _convert_matecho_EI(f, float_dtype)
 
-        # Fetch attributes
-        attrs_dict = _make_attrs_dict(f)
+    # Fetch attributes
+    attrs_dict = _make_attrs_dict(f)
 
     # Add attributes
     logger.info("Appending attributes to variables")
@@ -180,9 +180,10 @@ def _convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     ds = xr.Dataset()
 
     #### Add coordinates ####
-    # Channel
+    # Channel (echopype uses Vendor channel id, we use a descriptive string)
     vals_channel = np.asarray(f["FrequencySort"]).squeeze().astype(float_dtype)
-    ds.coords["channel"] = ("channel", vals_channel)
+    channel_str = [f"{int(c / 1e3)} kHz" for c in vals_channel]
+    ds.coords["channel"] = ("channel", channel_str)
 
     # Depth
     vals_depth = np.asarray(f["depth_surface"]).squeeze().astype(float_dtype)
@@ -222,7 +223,7 @@ def _convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     vals_mask: np.ndarray = np.asarray(f["Mask_clean"]).astype("?")  # boolean
     ds["mask_clean"] = (["channel", "ping_time", "depth"], vals_mask)
 
-    # Frequency nominal (for EP compat)
+    # Frequency nominal
     ds["frequency_nominal"] = (["channel"], vals_channel)
 
     # Bottom depth
@@ -235,7 +236,7 @@ def _convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
     ds["sun_alt"] = (["ping_time"], vals_sun)
 
     # Transpose
-    ds = ds.transpose("channel", "depth", "ping_time")
+    ds = ds.transpose("channel", "ping_time", "depth")
 
     logger.info("Done!")
 
@@ -265,7 +266,7 @@ def _make_attrs_dict(f: h5py.File) -> dict:
 
     attrs_dict = {
         "channel": {
-            "units": "Hz",
+            "long_name": "Echosounder channel",
         },
         "depth": {
             "long_name": "Range distance",

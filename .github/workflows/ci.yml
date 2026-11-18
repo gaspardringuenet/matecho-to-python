@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --locked --python ${{ matrix.python-version }}
+      - name: Build and install wheel
+        run: |
+          uv build
+          uv pip install --python .venv/bin/python --no-deps --reinstall dist/*.whl
+          .venv/bin/python -c "import matecho_to_python, sysconfig; from pathlib import Path; assert Path(matecho_to_python.__file__).is_relative_to(Path(sysconfig.get_path('purelib')))"
+      - name: Run tests
+        run: uv run --locked --no-sync pytest -q
