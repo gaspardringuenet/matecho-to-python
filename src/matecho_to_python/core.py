@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -17,22 +18,25 @@ def mat_to_zarr(
     float_dtype: npt.DTypeLike = np.float64,
     to_nan_Sv: float | None = None,
     zarr_format: int = 2,
+    range_lims: dict[Any, float] | None = None,
 ) -> Path:
     """Convert Matecho Echointegration.mat to xarray Zarr format compatible with Echostack
 
     Parameters
     ----------
-    input : os.PathLike | list[os.PathLike]
-        One or more Matecho Echointegration files. If several files are passed, they must be compatible (same depth and channel coordinates, compatible time coordinate).
-
-    float_dtype: npt.DTypeLike, default=np.float64
-        Datatype used to store floats in the Dataset.
-
-    to_nan_Sv: float, optional
-        A value of Sv which should be convert to NaN (e.g. -150 dB for manual data removal).
-
-    zarr_format: int, default=2
-        The desired zarr format to target (2 or 3) as of zarr v3.
+    input_paths : list[Path]
+        Paths to the echointegration .mat files.
+    float_dtype : npt.DTypeLike, default=np.float64
+        The dtype to use for float. Switch between np.float64 and np.float32 to
+        change the store's size on disk.
+    to_nan_Sv : float, optional
+        An Sv value to mask. Common use is -150 dB for Matecho data.
+    zarr_format : int, default 2
+        Zarr format.
+    range_lims : dict[Any, float], optional
+        Mapping of channel labels to maximum depth (e.g. {"120 kHz": 250}), with
+        Sv masked below that depth for that channel. Useful when original
+        echointegration allowed too much gain noise.
 
     Returns
     -------
@@ -57,6 +61,12 @@ def mat_to_zarr(
 
         logger.debug("Chunking")
         ds = ds.chunk({"channel": 1, "ping_time": 5000, "depth": 100})
+
+        if range_lims is not None:
+            logger.debug("Applying range limits")
+            for c, d in range_lims.items():
+                var = ds["Sv"]
+                ds["Sv"] = var.where(~((var.channel == c) & (var.depth > d)))
 
         if to_nan_Sv is not None:
             ds["Sv"] = ds["Sv"].where(ds["Sv"] != to_nan_Sv)

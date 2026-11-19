@@ -20,6 +20,18 @@ logging.basicConfig(
 warnings.filterwarnings("ignore", category=ZarrUserWarning)
 
 
+def _parse_range_lim(value: str) -> tuple[str, float]:
+    """Parse a CHANNEL:DEPTH string such as '120 kHz:250'"""
+
+    channel, sep, depth = value.rpartition(":")
+    if not sep or not channel.strip():
+        raise argparse.ArgumentTypeError(f"expected CHANNEL:DEPTH, got {value!r}")
+    try:
+        return channel.strip(), float(depth)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid depth in {value!r}") from None
+
+
 def parse_cli() -> argparse.Namespace:
     """Parse CLI arguments"""
 
@@ -42,6 +54,13 @@ def parse_cli() -> argparse.Namespace:
         type=float,
         required=False,
         help="Sv value to convert to NAN (typically -150 dB for manual data removal in Matecho)",
+    )
+    parser.add_argument(
+        "--range-lims",
+        type=_parse_range_lim,
+        action="append",
+        metavar="CHANNEL:DEPTH",
+        help="Mask Sv below DEPTH (m) for a channel, e.g. '120 kHz:250'. Repeat for several channels.",
     )
     parser.add_argument(
         "--zarr-format",
@@ -72,6 +91,7 @@ def main():
         float_dtype=np.float32 if args.light else np.float64,
         to_nan_Sv=args.to_nan_Sv,
         zarr_format=args.zarr_format,
+        range_lims=dict(args.range_lims) if args.range_lims else None,
     )
 
     # Open complete Dataset

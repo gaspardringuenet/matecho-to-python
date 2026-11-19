@@ -103,7 +103,9 @@ The functions responsible for the conversion logic are:
 ```bash
 $ matecho-to-python --help
 usage: matecho-to-python [-h] [--light | --no-light] [--to-nan-Sv TO_NAN_SV]
-                         [--zarr-format ZARR_FORMAT] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
+                         [--range-lims CHANNEL:DEPTH]
+                         [--zarr-format ZARR_FORMAT]
+                         [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
                          input [input ...]
 
 Convert Matecho Echointegration.mat to a Zarr store compatible with Echostack
@@ -113,13 +115,23 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --light, --no-light   Make the Dataset lighter by using float32 instead of float64 for non-time
-                        numerical variables
+  --light, --no-light   Make the Dataset lighter by using float32 instead of
+                        float64 for non-time numerical variables
   --to-nan-Sv TO_NAN_SV
-                        Sv value to convert to NAN (typically -150 dB for manual data removal in
-                        Matecho)
+                        Sv value to convert to NAN (typically -150 dB for
+                        manual data removal in Matecho)
+  --range-lims CHANNEL:DEPTH
+                        Mask Sv below DEPTH (m) for a channel, e.g. '120
+                        kHz:250'. Repeat for several channels.
   --zarr-format ZARR_FORMAT
-                        The desired zarr format to target (2 or 3) as of zarr v3. By default 2.
+                        The desired zarr format to target (2 or 3) as of zarr
+                        v3. By default 2.
   --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
                         Logging level. By default INFO.
+```
+
+Example masking Sv below 250 m on the 120 kHz channel and below 300 m on the 38 kHz channel (quote values containing spaces):
+
+```bash
+$ matecho-to-python Echointegration.mat --range-lims "120 kHz:250" --range-lims "38 kHz:300"
 ```
