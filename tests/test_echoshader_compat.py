@@ -17,12 +17,12 @@ from matecho_to_python import mat_to_zarr
 def mat_ds(tmp_path):
 
     path = tmp_path / "Echointegration.mat"
-    n_channel, n_ping, n_depth = 3, 20, 10
+    n_channel, n_ping, n_depth = 5, 20, 10
     shape = (n_channel, n_ping, n_depth)
     rng = np.random.default_rng(0)
 
     with h5py.File(path, "w") as f:
-        f["FrequencySort"] = np.array([[18e3], [38e3], [120e3]])
+        f["FrequencySort"] = np.array([[18e3], [38e3], [70e3], [120e3], [200e3]])
         f["depth_surface"] = np.linspace(1, 100, n_depth)
         f["Time"] = np.arange(n_ping, dtype=np.int64) + 1_700_000_000  # epoch seconds
         f["Latitude"] = np.full(n_ping, 45.0)

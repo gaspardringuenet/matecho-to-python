@@ -14,3 +14,4 @@ wheels/
 
 # Other
 .private
+.pytest_cache

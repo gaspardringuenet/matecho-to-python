@@ -53,6 +53,27 @@ $ tree -L 1
 
 A new `Echointegration_leg01.zarr` is created. Naming uses the first input file and changes then extension, but the data within is that of all three files.
 
+The output dataset is as follows:
+
+```raw
+<xarray.Dataset> Size: 32GB
+Dimensions:            (channel: 4, ping_time: 1110362, depth: 792)
+Coordinates:
+  * channel            (channel) <U7 112B '38 kHz' '70 kHz' '120 kHz' '200 kHz'
+  * ping_time          (ping_time) datetime64[ns] 9MB 2021-08-28T22:31:56 ......
+    latitude           (ping_time) float32 4MB ...
+    longitude          (ping_time) float32 4MB ...
+  * depth              (depth) float32 3kB 8.5 9.5 10.5 ... 797.5 798.5 799.5
+Data variables:
+    bottom             (channel, ping_time) float32 18MB ...
+    frequency_nominal  (channel) float32 16B ...
+    mask_clean         (channel, ping_time, depth) bool 4GB ...
+    sA                 (channel, ping_time, depth) float32 14GB ...
+    sA_sum             (channel, ping_time) float32 18MB ...
+    sun_alt            (ping_time) float32 4MB ...
+    Sv                 (channel, ping_time, depth) float32 14GB ...
+```
+
 ## Python API
 
 The tool also defines a simple Python API.
@@ -72,17 +93,17 @@ plot_small_echogram(ds_MVBS)
 
 ### Conversion logic
 
-The private functions responsible for the conversion logic are:
+The functions responsible for the conversion logic are:
 
-- `matecho_to_python.main._convert_matecho_EI` - formatting data arrays into an xarray `Dataset`.
-- `matecho_to_python.main._make_attrs_dict` - hardcoded variable attributes based on the [Matecho documentation](https://pages.iuem.eu/ird/matecho/user-guide/file-descriptions/matlab-data-files/echointegration-mat.html#fields).
+- `matecho_to_python.convert:convert_matecho_EI` - formatting data arrays into an xarray `Dataset`.
+- `matecho_to_python.convert:make_attrs_dict` - hardcoded variable attributes based on the [Matecho documentation](https://pages.iuem.eu/ird/matecho/user-guide/file-descriptions/matlab-data-files/echointegration-mat.html#fields).
 
-## Options
+## CLI options
 
 ```bash
 $ matecho-to-python --help
 usage: matecho-to-python [-h] [--light | --no-light] [--to-nan-Sv TO_NAN_SV]
-                         [--zarr-format ZARR_FORMAT] [--plot | --no-plot]
+                         [--zarr-format ZARR_FORMAT] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
                          input [input ...]
 
 Convert Matecho Echointegration.mat to a Zarr store compatible with Echostack
@@ -99,5 +120,6 @@ options:
                         Matecho)
   --zarr-format ZARR_FORMAT
                         The desired zarr format to target (2 or 3) as of zarr v3. By default 2.
-  --plot, --no-plot     Plot a small confirmation echogram after conversion.
+  --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                        Logging level. By default INFO.
 ```

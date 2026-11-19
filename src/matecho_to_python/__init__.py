@@ -1,3 +1,3 @@
-from .main import mat_to_zarr, plot_small_echogram
+from .core import mat_to_zarr
 
-__all__ = ["mat_to_zarr", "plot_small_echogram"]
+__all__ = ["mat_to_zarr"]
