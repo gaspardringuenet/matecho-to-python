@@ -19,6 +19,7 @@ matecho-to-python = "matecho_to_python.cli:main"
 
 [dependency-groups]
 dev = [
+    "echoregions>=0.2.4",
     "echoshader>=0.2.3",
     "holoviews>=1.23.2",
     "pytest>=9.2.0",

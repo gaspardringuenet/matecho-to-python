@@ -28,10 +28,9 @@ def convert_matecho_EI(f: h5py.File, float_dtype: npt.DTypeLike) -> xr.Dataset:
 
     # Time
     vals_ping_time = (
-        np.asarray(f["Time"])
-        .squeeze()
-        .astype(dtype="datetime64[s]")
-        .astype(dtype="datetime64[ns]")
+        np.round(np.asarray(f["Time"]).squeeze() * 1e9)
+        .astype(np.int64)
+        .astype("datetime64[ns]")
     )
     ds.coords["ping_time"] = ("ping_time", vals_ping_time)
 
